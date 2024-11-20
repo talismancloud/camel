@@ -74,8 +74,7 @@ public abstract class ExportBaseCommand extends CamelCommand {
             "camel.component.kamelet.location",
             "camel.jbang.classpathFiles",
             "camel.jbang.localKameletDir",
-            "camel.jbang.jkubeFiles",
-            "kamelet"
+            "camel.jbang.jkubeFiles"
     };
 
     private static final Pattern PACKAGE_PATTERN = Pattern.compile(
@@ -531,6 +530,11 @@ public abstract class ExportBaseCommand extends CamelCommand {
                 localKameletDir = localKameletDir.substring(scheme.length() + 1);
             }
         }
+
+        List<String> kameletsInProject = RuntimeUtil.loadPropertiesLines(settings).stream()
+                .filter(l -> l.startsWith("kamelet="))
+                .map(l -> l.replaceFirst("kamelet=", "")).toList();
+
         for (String k : SETTINGS_PROP_SOURCE_KEYS) {
             String files = prop.getProperty(k);
             if (files != null && !files.isEmpty()) {
@@ -548,12 +552,13 @@ public abstract class ExportBaseCommand extends CamelCommand {
                     }
                     String ext = FileUtil.onlyExt(f, true);
                     String ext2 = FileUtil.onlyExt(f, false);
-                    if (!"kamelet".equals(k) && ext == null) {
+                    if (!"camel.jbang.localKameletDir".equals(k) && ext == null) {
                         continue;
                     }
                     boolean java = "java".equals(ext);
-                    boolean kamelet = "kamelet".equals(k) || "camel.component.kamelet.location".equals(k)
+                    boolean kamelet = "camel.component.kamelet.location".equals(k)
                             || "camel.jbang.localKameletDir".equals(k) || "kamelet.yaml".equalsIgnoreCase(ext2);
+
                     boolean camel = !kamelet && "camel.main.routesIncludePattern".equals(k);
                     boolean jkube = "camel.jbang.jkubeFiles".equals(k);
                     boolean web = "html".equals(ext) || "js".equals(ext) || "css".equals(ext) || "jpeg".equals(ext)
@@ -563,9 +568,9 @@ public abstract class ExportBaseCommand extends CamelCommand {
                             : web ? srcWeb : srcResourcesDir;
 
                     File source;
-                    if ("kamelet".equals(k) && localKameletDir != null) {
+                    if ("camel.jbang.localKameletDir".equals(k) && localKameletDir != null) {
                         // source is a local kamelet
-                        source = new File(localKameletDir, f + ".kamelet.yaml");
+                        source = new File(localKameletDir);
                     } else {
                         source = new File(f);
                     }
@@ -577,8 +582,12 @@ public abstract class ExportBaseCommand extends CamelCommand {
                     }
                     if (!java) {
                         if (kamelet) {
-                            out.getParentFile().mkdirs();
-                            safeCopy(source, out, true);
+                            out.mkdirs();
+                            for (String kameletName : kameletsInProject) {
+                                File kameletSource = new File(source, kameletName + ".kamelet.yaml");
+                                File kameletTarget = new File(target, kameletName + ".kamelet.yaml");
+                                safeCopy(kameletSource, kameletTarget, true);
+                            }
                         } else if (jkube) {
                             // file should be renamed and moved into src/main/jkube
                             f = f.replace(".jkube.yaml", ".yaml");
